@@ -133,3 +133,5 @@ post/
 *.nupkg
 /Packages
 
+# checkpoint
+**/checkpoint/**
