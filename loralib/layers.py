@@ -108,6 +108,7 @@ class Linear(nn.Linear, LoRALayer):
         # Actual trainable parameters
         if r > 0:
             self.lora_A = nn.Parameter(self.weight.new_zeros((r, in_features)))
+            self.sigma = nn.Parameter(self.weight.new_zeros((r, r)))
             self.lora_B = nn.Parameter(self.weight.new_zeros((out_features, r)))
             self.scaling = self.lora_alpha / self.r
             # Freezing the pre-trained weight matrix
@@ -122,7 +123,8 @@ class Linear(nn.Linear, LoRALayer):
             # initialize B the same way as the default for nn.Linear and A to zero
             # this is different than what is described in the paper but should not affect performance
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-            nn.init.zeros_(self.lora_B)
+            nn.init.zeros_(self.sigma)
+            nn.init.kaiming_uniform_(self.lora_B, a=math.sqrt(5))
 
     def train(self, mode: bool = True):
         def T(w):
@@ -132,13 +134,13 @@ class Linear(nn.Linear, LoRALayer):
             if self.merge_weights and self.merged:
                 # Make sure that the weights are not merged
                 if self.r > 0:
-                    self.weight.data -= T(self.lora_B @ self.lora_A) * self.scaling
+                    self.weight.data -= T(self.lora_B @ self.sigma @ self.lora_A) * self.scaling
                 self.merged = False
         else:
             if self.merge_weights and not self.merged:
                 # Merge the weights and mark it
                 if self.r > 0:
-                    self.weight.data += T(self.lora_B @ self.lora_A) * self.scaling
+                    self.weight.data += T(self.lora_B @ self.sigma @ self.lora_A) * self.scaling
                 self.merged = True       
 
     def forward(self, x: torch.Tensor):
@@ -146,7 +148,7 @@ class Linear(nn.Linear, LoRALayer):
             return w.transpose(0, 1) if self.fan_in_fan_out else w
         if self.r > 0 and not self.merged:
             result = F.linear(x, T(self.weight), bias=self.bias)            
-            result += (self.lora_dropout(x) @ self.lora_A.transpose(0, 1) @ self.lora_B.transpose(0, 1)) * self.scaling
+            result += (self.lora_dropout(x) @ self.lora_A.transpose(0, 1) @ self.sigma.transpose(0, 1) @ self.lora_B.transpose(0, 1)) * self.scaling
             return result
         else:
             return F.linear(x, T(self.weight), bias=self.bias)

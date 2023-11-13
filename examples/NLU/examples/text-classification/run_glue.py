@@ -177,6 +177,10 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether to apply LoRA or not."},
     )
+    apply_delora: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to apply delora or not. Include to train sigma blocks only."},
+    )
     lora_alpha: Optional[int] = field(
         default=None,
         metadata={"help": "LoRA alpha"},
@@ -375,14 +379,22 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
+    '''
+    Setting Trainable Parameters
+    '''
     trainable_params = []
     if model_args.apply_lora:
+        # Load exisiting LoRA weights
         if model_args.lora_path is not None:
             lora_state_dict = torch.load(model_args.lora_path)
             logger.info(f"Apply LoRA state dict from {model_args.lora_path}.")
             logger.info(lora_state_dict.keys())
             model.load_state_dict(lora_state_dict, strict=False)
-        trainable_params.append('lora')
+        # in delora mode, only train sigma layers, else, train lora layers
+        if model_args.apply_delora:
+            trainable_params.append('sigma')
+        else:
+            trainable_params.append('lora')
 
     if model_args.apply_adapter:
         if model_args.adapter_path is not None:
@@ -406,6 +418,8 @@ def main():
     if model_args.apply_bitfit:
         trainable_params.append('bias')
 
+    num_trainable_param = 0
+    print(f"=============================== Trainable Layers ===============================")
     if len(trainable_params) > 0:
         for name, param in model.named_parameters():
             if name.startswith('deberta') or name.startswith('roberta'):
@@ -416,6 +430,12 @@ def main():
                         break
             else:
                 param.requires_grad = True
+
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(name, param.numel())
+            num_trainable_param += param.numel()
+    print(f"=============================== Total Trainable Parameters = {num_trainable_param} ===============================")
 
     # Preprocessing the datasets
     if data_args.task_name is not None:
