@@ -135,4 +135,4 @@ post/
 
 # checkpoint
 **/*checkpoint*/**
-**/*model.bin/**
+**/*model.bin
