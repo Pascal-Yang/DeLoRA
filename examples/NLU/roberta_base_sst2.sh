@@ -31,6 +31,4 @@ for lora_r in $lora_r_values; do
     --weight_decay 0.1 \
     --apply_lora \
     --apply_delora
-
-
 done
